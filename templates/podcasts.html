@@ -523,3 +523,25 @@
     </script>
 </body>
 </html>
+            filterAndDisplayPodcasts();
+        });
+
+        document.querySelector('.language-filter')?.addEventListener('change', () => {
+            filterAndDisplayPodcasts();
+        });
+
+        document.querySelectorAll('.language-tab')?.forEach(tab => {
+            tab.addEventListener('click', (e) => {
+                const lang = e.target.getAttribute('data-lang');
+                currentLanguage = lang;
+                filterAndDisplayPodcasts();
+                document.querySelectorAll('.language-tab').forEach(t => t.classList.remove('active'));
+                e.target.classList.add('active');
+            });
+        });
+
+        // Load podcasts when page loads
+        loadAllPodcasts();
+    </script>
+</body>
+</html>

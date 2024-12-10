@@ -43,6 +43,7 @@
             gap: 1rem;
             margin-bottom: 2rem;
             flex-wrap: wrap;
+            padding: 0 1rem;
         }
 
         .filter-btn {
@@ -50,7 +51,6 @@
             border: none;
             border-radius: 50px;
             background: var(--glass-bg);
-            backdrop-filter: blur(10px);
             color: var(--primary-color);
             font-weight: 600;
             cursor: pointer;
@@ -58,14 +58,10 @@
             box-shadow: 0 4px 15px rgba(0,0,0,0.1);
         }
 
-        .filter-btn:hover {
+        .filter-btn:hover, .filter-btn.active {
+            background: var(--primary-color);
+            color: white;
             transform: translateY(-2px);
-            box-shadow: 0 6px 20px rgba(37,99,235,0.2);
-        }
-
-        .filter-btn.active {
-            background: var(--gradient);
-            color: var(--white);
         }
 
         .news-grid {
@@ -218,6 +214,333 @@
                 font-size: 0.9rem;
             }
         }
+
+        /* Section Containers */
+        .section-container {
+            background: var(--glass-bg);
+            backdrop-filter: blur(10px);
+            border-radius: 20px;
+            padding: 2rem;
+            margin-bottom: 2rem;
+            box-shadow: 0 8px 32px rgba(0,0,0,0.1);
+        }
+
+        .section-title {
+            color: var(--primary-color);
+            font-size: 1.8rem;
+            margin-bottom: 1.5rem;
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+        }
+
+        .section-title i {
+            font-size: 1.5rem;
+        }
+
+        /* Case Studies Styles */
+        .case-studies-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
+            gap: 2rem;
+            padding: 1rem;
+        }
+
+        .case-study-card {
+            background: rgba(255, 255, 255, 0.9);
+            border-radius: 15px;
+            padding: 1.5rem;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+            transition: transform 0.3s ease;
+        }
+
+        .case-study-card:hover {
+            transform: translateY(-5px);
+        }
+
+        .case-header {
+            margin-bottom: 1rem;
+            border-bottom: 2px solid var(--primary-color);
+            padding-bottom: 1rem;
+        }
+
+        .case-header h3 {
+            color: var(--primary-color);
+            font-size: 1.3rem;
+            margin-bottom: 0.5rem;
+        }
+
+        .case-meta {
+            display: flex;
+            gap: 1.5rem;
+            color: var(--secondary-color);
+            font-size: 0.9rem;
+        }
+
+        .case-meta span {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .case-content p {
+            margin-bottom: 1rem;
+            line-height: 1.6;
+        }
+
+        .case-content strong {
+            color: var(--primary-color);
+        }
+
+        /* Laws and Regulations Styles */
+        .laws-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(350px, 1fr));
+            gap: 2rem;
+            padding: 1rem;
+        }
+
+        .law-card {
+            background: rgba(255, 255, 255, 0.9);
+            border-radius: 15px;
+            overflow: hidden;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+            transition: transform 0.3s ease;
+        }
+
+        .law-card:hover {
+            transform: translateY(-5px);
+        }
+
+        .law-header {
+            background: var(--gradient);
+            color: white;
+            padding: 1.5rem;
+        }
+
+        .law-header h3 {
+            font-size: 1.2rem;
+            margin-bottom: 0.5rem;
+        }
+
+        .jurisdiction {
+            display: inline-block;
+            padding: 0.3rem 0.8rem;
+            background: rgba(255, 255, 255, 0.2);
+            border-radius: 15px;
+            font-size: 0.9rem;
+        }
+
+        .law-content {
+            padding: 1.5rem;
+        }
+
+        .law-content h4 {
+            color: var(--primary-color);
+            margin-bottom: 1rem;
+        }
+
+        .law-content ul {
+            list-style: none;
+            padding: 0;
+        }
+
+        .law-content li {
+            margin-bottom: 0.8rem;
+            padding-left: 1.5rem;
+            position: relative;
+            line-height: 1.4;
+        }
+
+        .law-content li:before {
+            content: "•";
+            color: var(--primary-color);
+            position: absolute;
+            left: 0;
+        }
+
+        .law-update {
+            margin-top: 1.5rem;
+            padding-top: 1rem;
+            border-top: 1px solid rgba(0,0,0,0.1);
+            color: var(--secondary-color);
+            font-size: 0.9rem;
+        }
+
+        /* Responsive Design */
+        @media (max-width: 768px) {
+            .case-studies-grid,
+            .laws-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .section-container {
+                padding: 1.5rem;
+            }
+
+            .section-title {
+                font-size: 1.5rem;
+            }
+
+            .case-header h3,
+            .law-header h3 {
+                font-size: 1.1rem;
+            }
+        }
+
+        .case-studies-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 2rem;
+            padding: 1rem;
+        }
+
+        .case-study-card {
+            background: var(--glass-bg);
+            backdrop-filter: blur(10px);
+            border-radius: 20px;
+            padding: 1.5rem;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+            transition: transform 0.3s ease;
+        }
+
+        .case-study-card:hover {
+            transform: translateY(-5px);
+        }
+
+        .case-study-card h3 {
+            color: var(--primary-color);
+            margin-bottom: 1rem;
+            font-size: 1.2rem;
+        }
+
+        .case-content p {
+            margin-bottom: 0.8rem;
+            font-size: 0.95rem;
+        }
+
+        .regulations-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 2rem;
+            padding: 1rem;
+        }
+
+        .regulation-card {
+            background: var(--glass-bg);
+            backdrop-filter: blur(10px);
+            border-radius: 20px;
+            padding: 1.5rem;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+        }
+
+        .regulation-card h3 {
+            color: var(--primary-color);
+            margin-bottom: 1rem;
+            font-size: 1.2rem;
+        }
+
+        .regulation-card ul {
+            list-style-type: none;
+            padding: 0;
+        }
+
+        .regulation-card li {
+            margin-bottom: 0.5rem;
+            padding-left: 1.5rem;
+            position: relative;
+        }
+
+        .regulation-card li:before {
+            content: "•";
+            color: var(--primary-color);
+            position: absolute;
+            left: 0;
+        }
+
+        .news-meta {
+            display: flex;
+            gap: 1rem;
+            font-size: 0.9rem;
+            color: var(--secondary-color);
+            margin-top: 1rem;
+        }
+
+        .news-meta span {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        @media (max-width: 768px) {
+            .case-studies-grid,
+            .regulations-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        .news-filters {
+            display: flex;
+            justify-content: center;
+            gap: 1rem;
+            margin-bottom: 2rem;
+        }
+
+        .filter-btn {
+            padding: 0.8rem 1.5rem;
+            border: none;
+            border-radius: 50px;
+            background: var(--glass-bg);
+            color: var(--primary-color);
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .filter-btn:hover, .filter-btn.active {
+            background: var(--primary-color);
+            color: white;
+            transform: translateY(-2px);
+        }
+
+        .news-badge {
+            position: absolute;
+            top: 1rem;
+            right: 1rem;
+            padding: 0.5rem 1rem;
+            border-radius: 50px;
+            color: white;
+            font-size: 0.8rem;
+            font-weight: 600;
+        }
+
+        .news-badge.doping {
+            background: #e74c3c;
+        }
+
+        .news-badge.sports {
+            background: #3498db;
+        }
+
+        .news-badge.local-doping {
+            background: #c0392b;
+        }
+
+        .news-badge.local-sports {
+            background: #2980b9;
+        }
+
+        .news-card[data-category] {
+            display: none;
+        }
+
+        .news-card[data-category].show {
+            display: block;
+        }
+
+        .news-meta span:last-child {
+            color: #27ae60;
+        }
     </style>
 </head>
 <body>
@@ -246,37 +569,174 @@
             <p>Access comprehensive information about anti-doping regulations, latest news, and stay informed about clean sports practices.</p>
         </div>
 
-        <div class="news-filters">
-            <button class="filter-btn active" data-category="all">All News</button>
-            <button class="filter-btn" data-category="Doping News">Doping News</button>
-            <button class="filter-btn" data-category="Sports News">Sports News</button>
-        </div>
-
-        <div class="news-grid">
-            {% for article in news %}
-            <div class="news-card" data-category="{{ article.category }}">
-                <div class="news-image">
-                    {% if article.image %}
-                    <img src="{{ article.image }}" alt="{{ article.title }}">
-                    {% else %}
-                    <div class="placeholder-image">
-                        <i class="fas fa-newspaper"></i>
+        <div class="section-container">
+            <h2 class="section-title"><i class="fas fa-newspaper"></i> Latest News</h2>
+            <div class="news-filters">
+                <button class="filter-btn active" data-category="all">All News</button>
+                <button class="filter-btn" data-category="doping">Doping News</button>
+                <button class="filter-btn" data-category="sports">Sports News</button>
+                <button class="filter-btn" data-category="local-doping">Local Doping News</button>
+                <button class="filter-btn" data-category="local-sports">Local Sports News</button>
+            </div>
+            <div class="news-grid">
+                {% for article in categorized_news.doping_news %}
+                <div class="news-card" data-category="doping">
+                    {% if article.urlToImage %}
+                    <div class="news-image">
+                        <img src="{{ article.urlToImage }}" alt="{{ article.title }}" onerror="this.src='{{ url_for('static', filename='images/news-placeholder.jpg') }}'">
+                        <span class="news-badge doping">Doping News</span>
                     </div>
                     {% endif %}
-                    <span class="news-category">{{ article.category }}</span>
-                </div>
-                <div class="news-content">
-                    <div class="news-meta">
-                        <span class="news-source"><i class="fas fa-globe"></i> {{ article.source }}</span>
-                        <span class="news-date"><i class="far fa-calendar-alt"></i> {{ article.publishedAt }}</span>
+                    <div class="news-content">
+                        <h3><a href="{{ article.url }}" target="_blank" rel="noopener noreferrer">{{ article.title }}</a></h3>
+                        <p>{{ article.description }}</p>
+                        <div class="news-meta">
+                            <span><i class="fas fa-calendar"></i> {{ article.publishedAt }}</span>
+                            <span><i class="fas fa-newspaper"></i> {{ article.source.name }}</span>
+                        </div>
                     </div>
-                    <h2 class="news-title">{{ article.title }}</h2>
-                    <p class="news-description">{{ article.description }}</p>
-                    <a href="{{ article.url }}" target="_blank" class="read-more">Read More <i class="fas fa-arrow-right"></i></a>
+                </div>
+                {% endfor %}
+                
+                {% for article in categorized_news.sports_news %}
+                <div class="news-card" data-category="sports">
+                    {% if article.urlToImage %}
+                    <div class="news-image">
+                        <img src="{{ article.urlToImage }}" alt="{{ article.title }}" onerror="this.src='{{ url_for('static', filename='images/news-placeholder.jpg') }}'">
+                        <span class="news-badge sports">Sports News</span>
+                    </div>
+                    {% endif %}
+                    <div class="news-content">
+                        <h3><a href="{{ article.url }}" target="_blank" rel="noopener noreferrer">{{ article.title }}</a></h3>
+                        <p>{{ article.description }}</p>
+                        <div class="news-meta">
+                            <span><i class="fas fa-calendar"></i> {{ article.publishedAt }}</span>
+                            <span><i class="fas fa-newspaper"></i> {{ article.source.name }}</span>
+                        </div>
+                    </div>
+                </div>
+                {% endfor %}
+
+                {% for article in categorized_news.local_doping_news %}
+                <div class="news-card" data-category="local-doping">
+                    {% if article.urlToImage %}
+                    <div class="news-image">
+                        <img src="{{ article.urlToImage }}" alt="{{ article.title }}" onerror="this.src='{{ url_for('static', filename='images/news-placeholder.jpg') }}'">
+                        <span class="news-badge local-doping">Local Doping News</span>
+                    </div>
+                    {% endif %}
+                    <div class="news-content">
+                        <h3><a href="{{ article.url }}" target="_blank" rel="noopener noreferrer">{{ article.title }}</a></h3>
+                        <p>{{ article.description }}</p>
+                        <div class="news-meta">
+                            <span><i class="fas fa-calendar"></i> {{ article.publishedAt }}</span>
+                            <span><i class="fas fa-newspaper"></i> {{ article.source.name }}</span>
+                            <span><i class="fas fa-map-marker-alt"></i> Local</span>
+                        </div>
+                    </div>
+                </div>
+                {% endfor %}
+
+                {% for article in categorized_news.local_sports_news %}
+                <div class="news-card" data-category="local-sports">
+                    {% if article.urlToImage %}
+                    <div class="news-image">
+                        <img src="{{ article.urlToImage }}" alt="{{ article.title }}" onerror="this.src='{{ url_for('static', filename='images/news-placeholder.jpg') }}'">
+                        <span class="news-badge local-sports">Local Sports News</span>
+                    </div>
+                    {% endif %}
+                    <div class="news-content">
+                        <h3><a href="{{ article.url }}" target="_blank" rel="noopener noreferrer">{{ article.title }}</a></h3>
+                        <p>{{ article.description }}</p>
+                        <div class="news-meta">
+                            <span><i class="fas fa-calendar"></i> {{ article.publishedAt }}</span>
+                            <span><i class="fas fa-newspaper"></i> {{ article.source.name }}</span>
+                            <span><i class="fas fa-map-marker-alt"></i> Local</span>
+                        </div>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+
+        <div class="section-container">
+            <h2 class="section-title"><i class="fas fa-gavel"></i> Real Case Studies</h2>
+            <div class="case-studies-grid">
+                {% for case in case_studies %}
+                <div class="case-study-card">
+                    <h3>{{ case.title }} ({{ case.year }})</h3>
+                    <div class="case-content">
+                        <p><strong>Description:</strong> {{ case.description }}</p>
+                        <p><strong>Outcome:</strong> {{ case.outcome }}</p>
+                        <p><strong>Key Lessons:</strong> {{ case.lessons }}</p>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+
+        <div class="section-container">
+            <h2 class="section-title"><i class="fas fa-book"></i> Rules and Regulations</h2>
+            <div class="regulations-grid">
+                <div class="regulation-card">
+                    <h3>{{ regulations.wada_code.title }}</h3>
+                    <ul>
+                        {% for point in regulations.wada_code.key_points %}
+                        <li>{{ point }}</li>
+                        {% endfor %}
+                    </ul>
+                </div>
+                <div class="regulation-card">
+                    <h3>{{ regulations.prohibited_list.title }}</h3>
+                    <ul>
+                        {% for category in regulations.prohibited_list.categories %}
+                        <li>{{ category }}</li>
+                        {% endfor %}
+                    </ul>
+                </div>
+                <div class="regulation-card">
+                    <h3>{{ regulations.testing_procedures.title }}</h3>
+                    <ul>
+                        {% for type in regulations.testing_procedures.types %}
+                        <li>{{ type }}</li>
+                        {% endfor %}
+                    </ul>
                 </div>
             </div>
-            {% endfor %}
         </div>
+
+        <script>
+            document.addEventListener('DOMContentLoaded', function() {
+                const filterBtns = document.querySelectorAll('.filter-btn');
+                const newsCards = document.querySelectorAll('.news-card');
+
+                // Show all news cards initially
+                newsCards.forEach(card => card.classList.add('show'));
+
+                filterBtns.forEach(btn => {
+                    btn.addEventListener('click', function() {
+                        // Remove active class from all buttons
+                        filterBtns.forEach(b => b.classList.remove('active'));
+                        // Add active class to clicked button
+                        this.classList.add('active');
+
+                        const category = this.dataset.category;
+
+                        newsCards.forEach(card => {
+                            if (category === 'all') {
+                                card.classList.add('show');
+                            } else {
+                                if (card.dataset.category === category) {
+                                    card.classList.add('show');
+                                } else {
+                                    card.classList.remove('show');
+                                }
+                            }
+                        });
+                    });
+                });
+            });
+        </script>
     </div>
 
     <script>

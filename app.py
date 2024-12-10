@@ -1,10 +1,12 @@
 # Flask and Extensions
 from flask import Flask, render_template, request, jsonify, send_file, send_from_directory
 from flask_cors import CORS
+from flask_socketio import SocketIO, emit
 
 # Database
 from pymongo import MongoClient
 from bson import ObjectId
+from flask_sqlalchemy import SQLAlchemy
 
 # File Handling
 from werkzeug.utils import secure_filename
@@ -37,7 +39,7 @@ import time
 import random
 import logging
 import requests
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from dotenv import load_dotenv
 
 # Load environment variables
@@ -48,14 +50,17 @@ GOOGLE_API_KEY = os.getenv('GOOGLE_API_KEY')
 print(f"API Key loaded: {'[MASKED]' if GOOGLE_API_KEY else 'None'}")
 
 app = Flask(__name__, static_folder="static")
+app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///digital_twin.db'
+db = SQLAlchemy(app)
 app.secret_key = os.getenv('FLASK_SECRET_KEY', 'your-secret-key-here')
 CORS(app)
+socketio = SocketIO(app, cors_allowed_origins="*")
 
 # Initialize MongoDB connection with error handling
 try:
     client = MongoClient(os.getenv('MONGO_URI', 'mongodb://localhost:27017/'), serverSelectionTimeoutMS=5000)
     client.server_info()  # This will raise an exception if MongoDB is not running
-    db = client['gamified_quizzes']
+    db_mongo = client['gamified_quizzes']
     logging.info("Successfully connected to MongoDB")
 except Exception as e:
     logging.error(f"Failed to connect to MongoDB: {str(e)}")
@@ -77,14 +82,14 @@ except Exception as e:
         def drop(self):
             self.quizzes.clear()
     
-    db = type('obj', (object,), {
+    db_mongo = type('obj', (object,), {
         'quizzes': InMemoryQuizDB(),
         'quiz_results': {},
         'podcasts': {}
     })
     logging.warning("Using in-memory storage as fallback")
 
-nutrition_plans = db.nutrition_plans
+nutrition_plans = db_mongo.nutrition_plans
 
 # Initialize logging
 logging.basicConfig(
@@ -141,7 +146,7 @@ SAMPLE_PODCASTS = [
         'author': 'Dr. Sarah Johnson',
         'duration': 1800,  # 30 minutes
         'filename': 'understanding_antidoping.mp3',
-        'upload_date': datetime.utcnow()
+        'upload_date': datetime.now(timezone.utc)
     },
     {
         'title': 'Athlete Stories: Clean Sport Champions',
@@ -150,7 +155,7 @@ SAMPLE_PODCASTS = [
         'author': 'Michael Chen',
         'duration': 1200,  # 20 minutes
         'filename': 'clean_sport_champions.mp3',
-        'upload_date': datetime.utcnow()
+        'upload_date': datetime.now(timezone.utc)
     },
     {
         'title': 'Latest Updates in Anti-Doping Policies',
@@ -159,16 +164,16 @@ SAMPLE_PODCASTS = [
         'author': 'Emma Williams',
         'duration': 900,  # 15 minutes
         'filename': 'policy_updates.mp3',
-        'upload_date': datetime.utcnow()
+        'upload_date': datetime.now(timezone.utc)
     }
 ]
 
 def init_sample_podcasts():
     try:
         # Check if podcasts collection exists and is empty
-        if 'podcasts' not in db.list_collection_names() or db.podcasts.count_documents({}) == 0:
+        if 'podcasts' not in db_mongo.list_collection_names() or db_mongo.podcasts.count_documents({}) == 0:
             # Insert sample podcasts
-            db.podcasts.insert_many(SAMPLE_PODCASTS)
+            db_mongo.podcasts.insert_many(SAMPLE_PODCASTS)
             logging.info("Initialized sample podcast data")
     except Exception as e:
         logging.error(f"Error initializing sample podcasts: {str(e)}")
@@ -182,6 +187,147 @@ news_cache = {
     'data': []
 }
 
+# Import podcast cache
+from podcast_cache import PodcastCache
+
+# Initialize podcast cache
+podcast_cache = PodcastCache()
+
+# Import digital twin simulator
+from simulator import FitnessSimulator
+
+# Initialize simulator
+simulator = FitnessSimulator(socketio)
+
+# Digital Twin Database Models
+class Athlete(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(100), nullable=False)
+    email = db.Column(db.String(120), unique=True, nullable=False)
+    device_id = db.Column(db.String(100))
+    
+class FitnessMetric(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    athlete_id = db.Column(db.Integer, db.ForeignKey('athlete.id'))
+    timestamp = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
+    heart_rate = db.Column(db.Integer)
+    steps = db.Column(db.Integer)
+    sleep_hours = db.Column(db.Float)
+    hrv = db.Column(db.Float)
+    
+class Supplement(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    athlete_id = db.Column(db.Integer, db.ForeignKey('athlete.id'))
+    name = db.Column(db.String(100))
+    dosage = db.Column(db.String(50))
+    timestamp = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
+    risk_level = db.Column(db.String(20))
+
+# Digital Twin API Routes
+@app.route('/register_athlete', methods=['POST'])
+def register_athlete():
+    """Register a new athlete and start simulation"""
+    try:
+        data = request.get_json()
+        name = data.get('name', 'Demo Athlete')
+        
+        # Create new athlete
+        athlete = Athlete(
+            name=name,
+            email=f"{name.lower().replace(' ', '.')}@example.com",
+            device_id='DEMO-' + str(random.randint(1000, 9999))
+        )
+        db.session.add(athlete)
+        db.session.commit()
+        
+        # Start simulation for this athlete
+        simulator.start_simulation(str(athlete.id))
+        
+        return jsonify({
+            'status': 'success',
+            'athlete_id': str(athlete.id),
+            'message': 'Athlete registered successfully'
+        })
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({
+            'status': 'error',
+            'message': str(e)
+        }), 500
+
+@app.route('/api/athlete', methods=['GET'])
+def get_athletes():
+    try:
+        athletes = Athlete.query.all()
+        return jsonify([{
+            'id': athlete.id,
+            'name': athlete.name,
+            'email': athlete.email,
+            'device_id': athlete.device_id
+        } for athlete in athletes])
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/athlete/metrics/<athlete_id>', methods=['GET'])
+def athlete_metrics(athlete_id):
+    """Get metrics for a specific athlete"""
+    try:
+        metrics = FitnessMetric.query.filter_by(athlete_id=athlete_id).order_by(FitnessMetric.timestamp.desc()).first()
+        if metrics:
+            return jsonify({
+                'status': 'success',
+                'metrics': {
+                    'heart_rate': metrics.heart_rate,
+                    'steps': metrics.steps,
+                    'sleep_hours': metrics.sleep_hours,
+                    'hrv': metrics.hrv,
+                    'timestamp': metrics.timestamp.isoformat()
+                }
+            })
+        return jsonify({
+            'status': 'error',
+            'message': 'No metrics found for athlete'
+        }), 404
+    except Exception as e:
+        return jsonify({
+            'status': 'error',
+            'message': str(e)
+        }), 500
+
+@app.route('/api/athlete/supplements/<athlete_id>', methods=['GET'])
+def athlete_supplements(athlete_id):
+    """Get supplements for a specific athlete"""
+    try:
+        supplements = Supplement.query.filter_by(athlete_id=athlete_id).order_by(Supplement.timestamp.desc()).all()
+        return jsonify({
+            'status': 'success',
+            'supplements': [{
+                'name': s.name,
+                'dosage': s.dosage,
+                'timestamp': s.timestamp.isoformat(),
+                'risk_level': s.risk_level
+            } for s in supplements]
+        })
+    except Exception as e:
+        return jsonify({
+            'status': 'error',
+            'message': str(e)
+        }), 500
+
+# Digital Twin Frontend Routes
+@app.route('/digitaltwin')
+def digitaltwin():
+    """Render the digital twin page and start simulation"""
+    # Start simulation with a default ID
+    simulator.start_simulation('demo')
+    return render_template('digitaltwin.html')
+
+@app.route('/digitaltwin/dashboard/<athlete_id>')
+def athlete_dashboard(athlete_id):
+    """Render the athlete dashboard"""
+    athlete = Athlete.query.get_or_404(athlete_id)
+    return render_template('athlete_dashboard.html', athlete=athlete)
+
 # Routes
 @app.route("/")
 def home():
@@ -191,109 +337,85 @@ def home():
 def podcasts():
     return render_template("podcasts.html")
 
-@app.route("/digitaltwin")
-def digitaltwin():
-    return render_template("digitaltwin.html")
-
 @app.route("/smartlabels")
 def smartlabels():
     return render_template("smartlabels.html")
 
 @app.route('/antidopingwiki')
 def antidopingwiki():
-    global news_cache
-    current_time = datetime.utcnow()
+    """Render the anti-doping wiki page with categorized news and information"""
+    news_articles = fetch_antidoping_news()
     
-    # Check if we have cached news that's less than 30 minutes old
-    if (news_cache['last_update'] and 
-        (current_time - news_cache['last_update']).total_seconds() < 1800):
-        return render_template('antidopingwiki.html', news=news_cache['data'])
+    # Categorize news
+    categorized_news = {
+        'doping_news': [article for article in news_articles if article.get('category') == 'Doping News'],
+        'sports_news': [article for article in news_articles if article.get('category') == 'Sports News'],
+        'local_doping_news': [article for article in news_articles if article.get('category') == 'Local Doping News'],
+        'local_sports_news': [article for article in news_articles if article.get('category') == 'Local Sports News']
+    }
     
-    try:
-        # Fetch news about doping in sports
-        doping_response = newsapi.get_everything(
-            q='doping sports athletics',
-            language='en',
-            sort_by='publishedAt',
-            from_param=(datetime.utcnow() - timedelta(days=30)).strftime('%Y-%m-%d'),
-            page_size=10
-        )
-        
-        # Fetch general sports news
-        sports_response = newsapi.get_top_headlines(
-            category='sports',
-            language='en',
-            page_size=10
-        )
-        
-        all_news = []
-        
-        # Process doping news
-        if doping_response.get('status') == 'ok' and doping_response.get('articles'):
-            for article in doping_response['articles']:
-                if article.get('title') and article.get('description'):
-                    all_news.append({
-                        'title': article.get('title', ''),
-                        'description': article.get('description', ''),
-                        'url': article.get('url', '#'),
-                        'image': article.get('urlToImage', None),
-                        'publishedAt': datetime.strptime(article.get('publishedAt', datetime.utcnow().isoformat()), 
-                                                       '%Y-%m-%dT%H:%M:%SZ').strftime('%B %d, %Y'),
-                        'source': article.get('source', {}).get('name', 'Unknown Source'),
-                        'category': 'Doping News'
-                    })
-            
-        # Process sports news
-        if sports_response.get('status') == 'ok' and sports_response.get('articles'):
-            for article in sports_response['articles']:
-                if article.get('title') and article.get('description'):
-                    all_news.append({
-                        'title': article.get('title', ''),
-                        'description': article.get('description', ''),
-                        'url': article.get('url', '#'),
-                        'image': article.get('urlToImage', None),
-                        'publishedAt': datetime.strptime(article.get('publishedAt', datetime.utcnow().isoformat()),
-                                                       '%Y-%m-%dT%H:%M:%SZ').strftime('%B %d, %Y'),
-                        'source': article.get('source', {}).get('name', 'Unknown Source'),
-                        'category': 'Sports News'
-                    })
-        
-        if all_news:
-            # Update cache if we got news successfully
-            news_cache['last_update'] = current_time
-            news_cache['data'] = all_news
-            
-    except Exception as e:
-        logging.error(f"Error fetching news: {str(e)}")
-        import traceback
-        logging.error(f"Full error traceback: {traceback.format_exc()}")
-        
-        # Use cached data if available, otherwise use sample news
-        if news_cache['data']:
-            all_news = news_cache['data']
-        else:
-            all_news = [
-                {
-                    'title': 'Sample Sports News',
-                    'description': 'This is a sample sports news article. The news API might be temporarily unavailable.',
-                    'url': '#',
-                    'image': None,
-                    'publishedAt': datetime.utcnow().strftime('%B %d, %Y'),
-                    'source': 'Sample Source',
-                    'category': 'Sports News'
-                },
-                {
-                    'title': 'Sample Doping News',
-                    'description': 'This is a sample doping news article. The news API might be temporarily unavailable.',
-                    'url': '#',
-                    'image': None,
-                    'publishedAt': datetime.utcnow().strftime('%B %d, %Y'),
-                    'source': 'Sample Source',
-                    'category': 'Doping News'
-                }
+    # Real case studies data
+    case_studies = [
+        {
+            'title': 'Lance Armstrong Case',
+            'year': '2012',
+            'description': 'One of the most high-profile doping cases in sports history, involving systematic doping in professional cycling.',
+            'outcome': 'Stripped of 7 Tour de France titles and banned from competitive cycling.',
+            'lessons': 'Highlighted the importance of thorough investigations and whistleblower protection.'
+        },
+        {
+            'title': 'Russian Olympic Doping Scandal',
+            'year': '2014-2021',
+            'description': 'State-sponsored doping program affecting multiple Olympic Games.',
+            'outcome': 'Russia banned from using its name, flag, and anthem at major sporting events.',
+            'lessons': 'Led to stronger international anti-doping measures and increased scrutiny.'
+        },
+        {
+            'title': 'Maria Sharapova Case',
+            'year': '2016',
+            'description': 'Testing positive for meldonium after it was added to the prohibited list.',
+            'outcome': '15-month suspension from professional tennis.',
+            'lessons': 'Importance of staying updated with WADA prohibited list changes.'
+        }
+    ]
+    
+    # Anti-doping rules and regulations
+    regulations = {
+        'wada_code': {
+            'title': 'WADA Code 2021',
+            'key_points': [
+                'Definition of anti-doping rule violations',
+                'Testing and investigations procedures',
+                'Sanctions for violations',
+                'Appeals process'
             ]
+        },
+        'prohibited_list': {
+            'title': 'Prohibited Substances and Methods',
+            'categories': [
+                'Anabolic agents',
+                'Peptide hormones and growth factors',
+                'Beta-2 agonists',
+                'Hormone and metabolic modulators',
+                'Diuretics and masking agents'
+            ]
+        },
+        'testing_procedures': {
+            'title': 'Testing Procedures',
+            'types': [
+                'In-competition testing',
+                'Out-of-competition testing',
+                'Blood testing',
+                'Urine testing',
+                'Athlete Biological Passport'
+            ]
+        }
+    }
     
-    return render_template('antidopingwiki.html', news=all_news)
+    return render_template('antidopingwiki.html', 
+                         categorized_news=categorized_news,
+                         case_studies=case_studies,
+                         regulations=regulations)
 
 @app.route("/caloriescalculator")
 def caloriescalculator():
@@ -311,13 +433,13 @@ def games():
 def get_quiz(quiz_id):
     try:
         logging.info(f"Fetching quiz with ID: {quiz_id}")
-        quiz = db.quizzes.find_one({"quiz_id": quiz_id}, {"_id": 0})
+        quiz = db_mongo.quizzes.find_one({"quiz_id": quiz_id}, {"_id": 0})
         logging.info(f"Found quiz: {quiz}")
         
         if not quiz:
             # Try to initialize quiz data
             if init_quiz_data():
-                quiz = db.quizzes.find_one({"quiz_id": quiz_id}, {"_id": 0})
+                quiz = db_mongo.quizzes.find_one({"quiz_id": quiz_id}, {"_id": 0})
         
         if quiz:
             return jsonify({
@@ -379,7 +501,7 @@ class PodcastFetcher:
         self.youtube_quota = {
             'daily_limit': 10000,
             'used': 0,
-            'reset_time': datetime.now()
+            'reset_time': datetime.now(timezone.utc)
         }
         
         # Add iTunes search URL
@@ -406,7 +528,7 @@ class PodcastFetcher:
 
     def _check_youtube_quota(self, cost=1):
         """Check YouTube API quota"""
-        now = datetime.now()
+        now = datetime.now(timezone.utc)
         
         # Reset quota if it's a new day
         if now.date() > self.youtube_quota['reset_time'].date():
@@ -568,7 +690,7 @@ class PodcastFetcher:
                                     'title': item.get('collectionName', ''),
                                     'description': item.get('description', '')[:500],
                                     'author': item.get('artistName', ''),
-                                    'published_date': datetime.now().strftime('%Y-%m-%d'),
+                                    'published_date': datetime.now(timezone.utc).strftime('%Y-%m-%d'),
                                     'image_url': item.get('artworkUrl600', ''),
                                     'source_url': item.get('collectionViewUrl', ''),
                                     'source_type': 'itunes',
@@ -664,9 +786,9 @@ def get_podcasts():
                 'title': 'Clean Sport Insights',
                 'description': 'A podcast about maintaining integrity in sports and understanding anti-doping measures.',
                 'author': 'Sports Integrity Unit',
-                'published_date': datetime.now().strftime('%Y-%m-%d'),
+                'published_date': datetime.now(timezone.utc).strftime('%Y-%m-%d'),
                 'image_url': '/static/images/podcast-placeholder.jpg',
-                'source_url': '#',
+                'source_url': 'sample/podcast1',
                 'source_type': 'sample',
                 'category': 'Education & Prevention',
                 'language': 'en'
@@ -675,9 +797,9 @@ def get_podcasts():
                 'title': 'The Athlete\'s Corner',
                 'description': 'Weekly discussions about sports, training, and athlete well-being.',
                 'author': 'Sports Network',
-                'published_date': datetime.now().strftime('%Y-%m-%d'),
+                'published_date': datetime.now(timezone.utc).strftime('%Y-%m-%d'),
                 'image_url': '/static/images/podcast-placeholder.jpg',
-                'source_url': '#',
+                'source_url': 'sample/podcast2',
                 'source_type': 'sample',
                 'category': 'Athlete Stories',
                 'language': 'en'
@@ -686,38 +808,50 @@ def get_podcasts():
                 'title': 'Sports Science Today',
                 'description': 'Exploring the latest developments in sports science and performance.',
                 'author': 'Science in Sports',
-                'published_date': datetime.now().strftime('%Y-%m-%d'),
+                'published_date': datetime.now(timezone.utc).strftime('%Y-%m-%d'),
                 'image_url': '/static/images/podcast-placeholder.jpg',
-                'source_url': '#',
+                'source_url': 'sample/podcast3',
                 'source_type': 'sample',
                 'category': 'Testing & Science',
                 'language': 'en'
             }
         ]
 
+        # First try to get podcasts from cache
         all_podcasts = []
+        cached_sources = ['itunes', 'spotify', 'youtube']
+        
+        for source in cached_sources:
+            try:
+                cache_key = f"podcasts_{source}"
+                cached_data = podcast_cache.get_podcast(cache_key)
+                if cached_data:
+                    all_podcasts.extend(cached_data)
+                    print(f"Using cached {source} podcasts")
+                    continue
 
-        # Try to fetch from each source independently
-        try:
-            itunes_podcasts = app.podcast_fetcher.fetch_itunes_podcasts()
-            if itunes_podcasts:
-                all_podcasts.extend(itunes_podcasts)
-        except Exception as itunes_error:
-            logging.error(f"iTunes fetch failed: {str(itunes_error)}")
+                # If not in cache, fetch from source
+                source_podcasts = []
+                if source == 'itunes':
+                    source_podcasts = app.podcast_fetcher.fetch_itunes_podcasts()
+                elif source == 'spotify':
+                    source_podcasts = app.podcast_fetcher.fetch_spotify_podcasts()
+                elif source == 'youtube':
+                    source_podcasts = app.podcast_fetcher.fetch_youtube_videos()
 
-        try:
-            spotify_podcasts = app.podcast_fetcher.fetch_spotify_podcasts()
-            if spotify_podcasts:
-                all_podcasts.extend(spotify_podcasts)
-        except Exception as spotify_error:
-            logging.error(f"Spotify fetch failed: {str(spotify_error)}")
+                if source_podcasts:
+                    # Cache the results
+                    podcast_cache.cache[cache_key] = {
+                        'data': source_podcasts,
+                        'timestamp': datetime.now(timezone.utc).isoformat()
+                    }
+                    podcast_cache.save_cache()
+                    all_podcasts.extend(source_podcasts)
+                    print(f"Fetched and cached new {source} podcasts")
 
-        try:
-            youtube_videos = app.podcast_fetcher.fetch_youtube_videos()
-            if youtube_videos:
-                all_podcasts.extend(youtube_videos)
-        except Exception as youtube_error:
-            logging.error(f"YouTube fetch failed: {str(youtube_error)}")
+            except Exception as error:
+                logging.error(f"{source} fetch/cache failed: {str(error)}")
+                continue
 
         # If no podcasts were found from any source, use sample podcasts
         if not all_podcasts:
@@ -755,7 +889,7 @@ def submit_quiz():
         email = data.get('email', '')  # Optional email for blockchain certificate
 
         # Get quiz data
-        quiz = db.quizzes.find_one({"quiz_id": quiz_id}, {"_id": 0})
+        quiz = db_mongo.quizzes.find_one({"quiz_id": quiz_id}, {"_id": 0})
         if not quiz:
             raise ValueError("Invalid quiz ID")
 
@@ -765,7 +899,7 @@ def submit_quiz():
             raise ValueError("Number of answers does not match number of questions")
 
         score = calculate_score(answers, correct_answers)
-        timestamp = datetime.utcnow()
+        timestamp = datetime.now(timezone.utc)
 
         # Store quiz result
         quiz_result = {
@@ -821,7 +955,7 @@ def submit_quiz():
                 certificate_data = {'error': str(e)}
         
         # Store result in database
-        db.quiz_results.insert_one(quiz_result)
+        db_mongo.quiz_results.insert_one(quiz_result)
 
         return jsonify({
             'success': True,
@@ -860,7 +994,7 @@ def download_certificate(user_id, filename):
 @app.route("/get_progress/<user_id>")
 def get_progress(user_id):
     try:
-        scores = list(db.scores.find({"user_id": user_id}, {"_id": 0}))
+        scores = list(db_mongo.scores.find({"user_id": user_id}, {"_id": 0}))
         return jsonify(scores), 200
     except Exception as e:
         logging.error(f"Error getting progress: {str(e)}")
@@ -915,7 +1049,7 @@ def save_nutrition_plan():
     try:
         data = request.json
         # Add timestamp and generate unique ID
-        data['created_at'] = datetime.utcnow()
+        data['created_at'] = datetime.now(timezone.utc)
         data['_id'] = str(ObjectId())
         
         # Save to MongoDB
@@ -1305,13 +1439,13 @@ def upload_podcast():
             'author': request.form.get('author', 'Anonymous'),
             'filename': filename,
             'duration': duration,
-            'upload_date': datetime.utcnow(),
+            'upload_date': datetime.now(timezone.utc),
             'language': request.form.get('language', 'en'),
             'tags': request.form.get('tags', '').split(',') if request.form.get('tags') else []
         }
         
         # Save to MongoDB
-        result = db.podcasts.insert_one(podcast)
+        result = db_mongo.podcasts.insert_one(podcast)
         podcast['_id'] = str(result.inserted_id)
         
         return jsonify({
@@ -1328,7 +1462,7 @@ def upload_podcast():
 def delete_podcast(podcast_id):
     try:
         # Find the podcast
-        podcast = db.podcasts.find_one({'_id': ObjectId(podcast_id)})
+        podcast = db_mongo.podcasts.find_one({'_id': ObjectId(podcast_id)})
         if not podcast:
             return jsonify({'success': False, 'error': 'Podcast not found'}), 404
             
@@ -1338,7 +1472,7 @@ def delete_podcast(podcast_id):
             os.remove(file_path)
             
         # Delete from MongoDB
-        db.podcasts.delete_one({'_id': ObjectId(podcast_id)})
+        db_mongo.podcasts.delete_one({'_id': ObjectId(podcast_id)})
         
         return jsonify({'success': True, 'message': 'Podcast deleted successfully'})
         
@@ -1350,7 +1484,7 @@ def delete_podcast(podcast_id):
 def update_podcast(podcast_id):
     try:
         # Get the podcast
-        podcast = db.podcasts.find_one({'_id': ObjectId(podcast_id)})
+        podcast = db_mongo.podcasts.find_one({'_id': ObjectId(podcast_id)})
         if not podcast:
             return jsonify({'success': False, 'error': 'Podcast not found'}), 404
             
@@ -1388,7 +1522,7 @@ def update_podcast(podcast_id):
                 update_data['filename'] = filename
         
         # Update in MongoDB
-        db.podcasts.update_one(
+        db_mongo.podcasts.update_one(
             {'_id': ObjectId(podcast_id)},
             {'$set': update_data}
         )
@@ -1411,128 +1545,87 @@ def calculate_score(user_answers, correct_answers):
     correct_count = sum(1 for user_ans, correct_ans in zip(user_answers, correct_answers) if user_ans == correct_ans)
     return (correct_count / len(correct_answers)) * 100
 
-def fetch_sports_podcasts():
-    """Fetch sports and anti-doping related podcasts from multiple sources"""
-    all_podcasts = []
-    
-    # List of RSS feeds for sports and anti-doping content
-    rss_feeds = [
-        {
-            'url': 'https://feeds.megaphone.fm/EMPOW3391357123',  # Sports Integrity Podcast
-            'category': 'Sports Integrity'
-        },
-        {
-            'url': 'https://anchor.fm/s/1f8af31c/podcast/rss',  # Play True Podcast
-            'category': 'Anti-Doping'
-        },
-        {
-            'url': 'https://feeds.buzzsprout.com/1052198.rss',  # Clean Sport Collective
-            'category': 'Clean Sport'
-        },
-        {
-            'url': 'https://feeds.soundcloud.com/users/soundcloud:users:307223250/sounds.rss',  # UKAD Podcast
-            'category': 'Anti-Doping'
-        },
-        {
-            'url': 'https://www.listennotes.com/c/r/37a1c7f7e0e246d8a8696a95c7c93d62',  # The Doping Podcast
-            'category': 'Anti-Doping Education'
-        }
-    ]
-    
-    # YouTube channels and playlists for anti-doping content
-    youtube_sources = [
-        'https://www.youtube.com/user/wadamovies/videos',  # WADA's YouTube channel
-        'https://www.youtube.com/user/cleansport/videos',  # Clean Sport
-        'https://www.youtube.com/c/antidoping/videos'  # Anti-Doping Channel
-    ]
-    
+def fetch_antidoping_news():
+    """Fetch and categorize anti-doping and sports news from News API"""
     try:
-        # Fetch from RSS feeds
-        for feed_info in rss_feeds:
-            try:
-                feed = feedparser.parse(feed_info['url'])
-                for entry in feed.entries[:5]:  # Get latest 5 episodes
-                    try:
-                        # Extract audio URL from enclosures or content
-                        audio_url = ''
-                        if hasattr(entry, 'enclosures') and entry.enclosures:
-                            audio_url = next((e['href'] for e in entry.enclosures 
-                                            if e.get('type', '').startswith('audio/')), '')
-                        
-                        # Get the largest image from media content or thumbnail
-                        image_url = ''
-                        if hasattr(entry, 'media_content'):
-                            images = [m['url'] for m in entry.media_content 
-                                    if m.get('type', '').startswith('image/')]
-                            if images:
-                                image_url = max(images, key=lambda x: int(x.get('width', 0)))
-                        elif hasattr(entry, 'media_thumbnail'):
-                            image_url = entry.media_thumbnail[0]['url']
-                        
-                        podcast = {
-                            'title': entry.get('title', 'Untitled Episode'),
-                            'description': BeautifulSoup(entry.get('description', ''), 'html.parser').get_text()[:500],
-                            'published_date': entry.get('published', ''),
-                            'duration': entry.get('itunes_duration', ''),
-                            'audio_url': audio_url,
-                            'image_url': image_url,
-                            'source_url': entry.get('link', ''),
-                            'author': entry.get('author', feed.feed.get('title', 'Unknown')),
-                            'category': feed_info['category'],
-                            'language': entry.get('language', 'en'),
-                            'source_type': 'rss'
-                        }
-                        all_podcasts.append(podcast)
-                        logging.info(f"Added podcast: {podcast['title']} from {feed_info['url']}")
-                    except Exception as entry_error:
-                        logging.error(f"Error processing entry from {feed_info['url']}: {str(entry_error)}")
-                        continue
-            except Exception as feed_error:
-                logging.error(f"Error fetching feed {feed_info['url']}: {str(feed_error)}")
-                continue
+        # Fetch doping-related news
+        doping_params = {
+            'q': '(doping OR anti-doping OR WADA) AND (sports OR athletics)',
+            'apiKey': os.environ.get('NEWS_API_KEY'),
+            'language': 'en',
+            'sortBy': 'publishedAt',
+            'pageSize': 10
+        }
+        doping_response = requests.get("https://newsapi.org/v2/everything", params=doping_params)
         
-        # Fetch from YouTube (if API key is available)
-        youtube_api_key = os.getenv('YOUTUBE_API_KEY')
-        if youtube_api_key:
-            for source in youtube_sources:
-                try:
-                    channel_id = source.split('/')[-2]
-                    url = f"https://www.googleapis.com/youtube/v3/search"
-                    params = {
-                        'key': youtube_api_key,
-                        'channelId': channel_id,
-                        'part': 'snippet',
-                        'order': 'date',
-                        'maxResults': 5,
-                        'type': 'video'
-                    }
-                    response = requests.get(url, params=params)
-                    if response.status_code == 200:
-                        data = response.json()
-                        for item in data.get('items', []):
-                            video = {
-                                'title': item['snippet']['title'],
-                                'description': item['snippet']['description'][:500],
-                                'published_date': item['snippet']['publishedAt'],
-                                'image_url': item['snippet']['thumbnails']['high']['url'],
-                                'source_url': f"https://www.youtube.com/watch?v={item['id']['videoId']}",
-                                'author': item['snippet']['channelTitle'],
-                                'category': 'Anti-Doping Education',
-                                'language': 'en',
-                                'source_type': 'youtube'
-                            }
-                            all_podcasts.append(video)
-                except Exception as yt_error:
-                    logging.error(f"Error fetching YouTube content from {source}: {str(yt_error)}")
-                    continue
+        # Fetch general sports news
+        sports_params = {
+            'category': 'sports',
+            'apiKey': os.environ.get('NEWS_API_KEY'),
+            'language': 'en',
+            'pageSize': 10
+        }
+        sports_response = requests.get("https://newsapi.org/v2/top-headlines", params=sports_params)
         
-        # Sort all podcasts by published date
-        all_podcasts.sort(key=lambda x: x.get('published_date', ''), reverse=True)
-        return all_podcasts
+        # Fetch local sports news (India-specific)
+        local_params = {
+            'q': '(sports OR athletics OR doping) AND (India OR Indian)',
+            'apiKey': os.environ.get('NEWS_API_KEY'),
+            'language': 'en',
+            'sortBy': 'publishedAt',
+            'pageSize': 10
+        }
+        local_response = requests.get("https://newsapi.org/v2/everything", params=local_params)
+        
+        all_news = []
+        
+        # Process doping news
+        if doping_response.status_code == 200:
+            doping_articles = doping_response.json().get('articles', [])
+            for article in doping_articles:
+                if article.get('title') and article.get('description'):
+                    article['category'] = 'Doping News'
+                    all_news.append(article)
+        
+        # Process sports news
+        if sports_response.status_code == 200:
+            sports_articles = sports_response.json().get('articles', [])
+            for article in sports_articles:
+                if article.get('title') and article.get('description'):
+                    article['category'] = 'Sports News'
+                    all_news.append(article)
+        
+        # Process local news
+        if local_response.status_code == 200:
+            local_articles = local_response.json().get('articles', [])
+            for article in local_articles:
+                if article.get('title') and article.get('description'):
+                    # Check if the article mentions doping-related terms
+                    if any(term in article.get('title', '').lower() + article.get('description', '').lower() 
+                          for term in ['doping', 'anti-doping', 'wada', 'nada', 'banned substance']):
+                        article['category'] = 'Local Doping News'
+                    else:
+                        article['category'] = 'Local Sports News'
+                    all_news.append(article)
+        
+        # Remove duplicates based on title
+        seen_titles = set()
+        unique_news = []
+        for article in all_news:
+            if article['title'] not in seen_titles:
+                seen_titles.add(article['title'])
+                unique_news.append(article)
+        
+        # Sort all news by publishedAt
+        unique_news.sort(key=lambda x: x.get('publishedAt', ''), reverse=True)
+        return unique_news
         
     except Exception as e:
-        logging.error(f"Error in fetch_sports_podcasts: {str(e)}")
+        logging.error(f"Error fetching news: {str(e)}")
         return []
 
-if __name__ == "__main__":
-    app.run(debug=True)
+if __name__ == '__main__':
+    with app.app_context():
+        db.create_all()
+        print("Database tables created successfully")
+    socketio.run(app, debug=True, allow_unsafe_werkzeug=True)

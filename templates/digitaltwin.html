@@ -6,6 +6,7 @@
     <title>Digital Twin - Anti-Doping Education Platform</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
     <style>
         .container {
             max-width: 1200px;
@@ -47,14 +48,25 @@
             margin-right: 10px;
             min-width: 120px;
         }
-        ul {
-            list-style: none;
-            padding: 0;
-        }
-        li {
+        .alert {
+            padding: 10px;
             margin: 10px 0;
-            padding: 5px 0;
-            border-bottom: 1px solid #eee;
+            border-radius: 4px;
+        }
+        .alert-medium {
+            background-color: #fff3cd;
+            border: 1px solid #ffeeba;
+            color: #856404;
+        }
+        .alert-high {
+            background-color: #f8d7da;
+            border: 1px solid #f5c6cb;
+            color: #721c24;
+        }
+        .chart-container {
+            position: relative;
+            height: 300px;
+            width: 100%;
         }
     </style>
 </head>
@@ -80,66 +92,198 @@
             <div class="profile-info">
                 <div class="info-item">
                     <label>Name:</label>
-                    <span id="athlete-name">Loading...</span>
+                    <span id="athlete-name">Demo Athlete</span>
                 </div>
                 <div class="info-item">
                     <label>Sport:</label>
-                    <span id="athlete-sport">Loading...</span>
+                    <span id="athlete-sport">Running</span>
                 </div>
                 <div class="info-item">
-                    <label>Training Status:</label>
-                    <span id="training-status">Loading...</span>
+                    <label>Status:</label>
+                    <span id="connectionStatus" class="badge bg-success">Connected</span>
                 </div>
             </div>
         </div>
 
         <div class="metrics-section">
+            <!-- Heart Rate Card -->
             <div class="metric-card">
-                <h3>Physical Metrics</h3>
-                <ul>
-                    <li>Heart Rate: <span id="heart-rate">Loading...</span></li>
-                    <li>Blood Pressure: <span id="blood-pressure">Loading...</span></li>
-                    <li>VO2 Max: <span id="vo2-max">Loading...</span></li>
-                </ul>
+                <h3>Heart Rate</h3>
+                <div class="chart-container">
+                    <canvas id="heartRateChart"></canvas>
+                </div>
+                <div class="info-item">
+                    <label>Current:</label>
+                    <span id="heart-rate">-- bpm</span>
+                </div>
             </div>
+
+            <!-- Activity Card -->
             <div class="metric-card">
-                <h3>Training Load</h3>
-                <ul>
-                    <li>Weekly Hours: <span id="weekly-hours">Loading...</span></li>
-                    <li>Intensity Level: <span id="intensity-level">Loading...</span></li>
-                    <li>Recovery Status: <span id="recovery-status">Loading...</span></li>
-                </ul>
+                <h3>Activity</h3>
+                <div class="info-item">
+                    <label>Current:</label>
+                    <span id="current-activity">--</span>
+                </div>
+                <div class="info-item">
+                    <label>Steps:</label>
+                    <span id="steps">--</span>
+                </div>
+                <div class="info-item">
+                    <label>Sleep:</label>
+                    <span id="sleep-hours">-- hours</span>
+                </div>
+            </div>
+
+            <!-- Health Metrics Card -->
+            <div class="metric-card">
+                <h3>Health Metrics</h3>
+                <div class="info-item">
+                    <label>HRV:</label>
+                    <span id="hrv">-- ms</span>
+                </div>
+                <div class="info-item">
+                    <label>Stress Level:</label>
+                    <div class="progress" style="width: 100%; height: 20px;">
+                        <div id="stress-level" class="progress-bar bg-warning" role="progressbar" style="width: 0%">0%</div>
+                    </div>
+                </div>
+                <div class="info-item">
+                    <label>Recovery:</label>
+                    <div class="progress" style="width: 100%; height: 20px;">
+                        <div id="recovery-score" class="progress-bar bg-success" role="progressbar" style="width: 0%">0%</div>
+                    </div>
+                </div>
+                <div class="info-item">
+                    <label>Hydration:</label>
+                    <div class="progress" style="width: 100%; height: 20px;">
+                        <div id="hydration-level" class="progress-bar bg-info" role="progressbar" style="width: 0%">0%</div>
+                    </div>
+                </div>
             </div>
         </div>
 
+        <!-- Risk Alerts Section -->
         <div class="recommendations-section">
-            <h2>Personalized Recommendations</h2>
-            <div id="recommendations">
-                Loading recommendations...
-            </div>
+            <h3>Risk Alerts</h3>
+            <div id="risk-alerts"></div>
         </div>
     </div>
 
+    <script src="https://cdn.socket.io/4.0.1/socket.io.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script>
-        // Simulated data - In a real application, this would come from your backend
-        setTimeout(() => {
-            document.getElementById('athlete-name').textContent = 'John Doe';
-            document.getElementById('athlete-sport').textContent = 'Track and Field';
-            document.getElementById('training-status').textContent = 'Active';
-            document.getElementById('heart-rate').textContent = '65 bpm';
-            document.getElementById('blood-pressure').textContent = '120/80';
-            document.getElementById('vo2-max').textContent = '50 ml/kg/min';
-            document.getElementById('weekly-hours').textContent = '15 hours';
-            document.getElementById('intensity-level').textContent = 'Moderate';
-            document.getElementById('recovery-status').textContent = 'Good';
-            document.getElementById('recommendations').innerHTML = `
-                <ul>
-                    <li>Increase hydration during training sessions</li>
-                    <li>Add more recovery time between high-intensity workouts</li>
-                    <li>Focus on flexibility training this week</li>
-                </ul>
+        const socket = io();
+        let heartRateChart = null;
+        const maxDataPoints = 50;
+        let heartRateData = [];
+        let labels = [];
+
+        // Initialize Chart.js
+        function initializeCharts() {
+            const ctx = document.getElementById('heartRateChart').getContext('2d');
+            heartRateChart = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        label: 'Heart Rate (BPM)',
+                        data: heartRateData,
+                        borderColor: 'rgb(255, 99, 132)',
+                        tension: 0.1,
+                        fill: false
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        y: {
+                            beginAtZero: false,
+                            min: 40,
+                            max: 200
+                        }
+                    },
+                    animation: {
+                        duration: 0
+                    }
+                }
+            });
+        }
+
+        function updateChart(heartRate, timestamp) {
+            const time = new Date(timestamp).toLocaleTimeString();
+            
+            heartRateData.push(heartRate);
+            labels.push(time);
+
+            if (heartRateData.length > maxDataPoints) {
+                heartRateData.shift();
+                labels.shift();
+            }
+
+            heartRateChart.update();
+        }
+
+        // Listen for real-time metric updates
+        socket.on('metrics_update', function(data) {
+            // Update heart rate
+            document.getElementById('heart-rate').textContent = `${data.heart_rate} bpm`;
+            updateChart(data.heart_rate, data.timestamp);
+
+            // Update activity metrics
+            document.getElementById('current-activity').textContent = data.activity;
+            document.getElementById('steps').textContent = data.steps;
+            document.getElementById('sleep-hours').textContent = `${data.sleep_hours} hours`;
+            
+            // Update health metrics
+            document.getElementById('hrv').textContent = `${data.hrv} ms`;
+            
+            // Update progress bars
+            const stressLevel = document.getElementById('stress-level');
+            stressLevel.style.width = `${data.stress_level}%`;
+            stressLevel.textContent = `${Math.round(data.stress_level)}%`;
+            
+            const recoveryScore = document.getElementById('recovery-score');
+            recoveryScore.style.width = `${data.recovery_score}%`;
+            recoveryScore.textContent = `${Math.round(data.recovery_score)}%`;
+            
+            const hydrationLevel = document.getElementById('hydration-level');
+            hydrationLevel.style.width = `${data.hydration_level}%`;
+            hydrationLevel.textContent = `${Math.round(data.hydration_level)}%`;
+
+            // Update connection status
+            document.getElementById('connectionStatus').className = 'badge bg-success';
+            document.getElementById('connectionStatus').textContent = 'Connected';
+            document.getElementById('athlete-name').textContent = "Demo Athlete";
+            document.getElementById('athlete-sport').textContent = "Running";
+        });
+
+        // Listen for risk alerts
+        socket.on('risk_alert', function(data) {
+            const alertsContainer = document.getElementById('risk-alerts');
+            const alertDiv = document.createElement('div');
+            alertDiv.className = `alert alert-${data.level}`;
+            alertDiv.innerHTML = `
+                <strong>${data.type}</strong><br>
+                ${data.message}
             `;
-        }, 1000);
+            alertsContainer.insertBefore(alertDiv, alertsContainer.firstChild);
+
+            // Remove old alerts if there are too many
+            if (alertsContainer.children.length > 5) {
+                alertsContainer.removeChild(alertsContainer.lastChild);
+            }
+        });
+
+        // Initialize on page load
+        window.onload = function() {
+            initializeCharts();
+            document.getElementById('connectionStatus').className = 'badge bg-success';
+            document.getElementById('connectionStatus').textContent = 'Connected';
+            document.getElementById('athlete-name').textContent = "Demo Athlete";
+            document.getElementById('athlete-sport').textContent = "Running";
+        };
     </script>
 
     <footer>
